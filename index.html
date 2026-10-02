@@ -4,19 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b0c0f">
-  <meta name="description" content="Private, local LFM 2.5 VL chat in your browser with LiteRT-LM.">
+  <meta name="description" content="Private, local Gemma 4 E2B chat in your browser with LiteRT-LM.">
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="stylesheet" href="./styles.css?v=3">
-  <title>Edge Chat — LFM 2.5 VL</title>
+  <title>Edge Chat — Gemma 4 E2B</title>
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark" aria-hidden="true">✦</span><div><strong>Edge Chat</strong><span>LFM 2.5 VL · LiteRT-LM</span></div></div>
+      <div class="brand"><span class="brand-mark" aria-hidden="true">✦</span><div><strong>Edge Chat</strong><span>Gemma 4 E2B · LiteRT-LM</span></div></div>
       <div class="topbar-actions">
         <button id="installButton" class="install-button hidden" type="button">Install</button>
         <button id="historyButton" class="icon-button" type="button" title="Chat history" aria-label="Chat history">🕘</button>
@@ -26,7 +26,7 @@
     </header>
 
     <section class="model-card" aria-labelledby="modelTitle">
-      <div class="model-card-head"><div><p class="eyebrow">On-device AI</p><h1 id="modelTitle">LFM 2.5 VL</h1><p class="muted">Runs locally in this browser with WebGPU. Your messages stay on this device.</p></div><span id="statusDot" class="status-dot" data-state="idle" aria-label="Model not loaded"></span></div>
+      <div class="model-card-head"><div><p class="eyebrow">On-device AI</p><h1 id="modelTitle">Gemma 4 E2B</h1><p class="muted">Runs locally in this browser with WebGPU. Your messages stay on this device.</p></div><span id="statusDot" class="status-dot" data-state="idle" aria-label="Model not loaded"></span></div>
       <div class="model-meta"><span id="statusText">Model not loaded</span><span>~2.6 GB download</span></div>
       <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
       <button id="loadButton" class="primary-button" type="button">Load model</button>
@@ -34,14 +34,14 @@
     </section>
 
     <section id="chatLog" class="chat-log" aria-live="polite" aria-label="Conversation">
-      <div class="empty-state" id="emptyState"><span class="empty-icon" aria-hidden="true">◌</span><h2>Private chat, local model</h2><p>Load LFM, then ask for an explanation, rewrite, plan, or idea.</p></div>
+      <div class="empty-state" id="emptyState"><span class="empty-icon" aria-hidden="true">◌</span><h2>Private chat, local model</h2><p>Load Gemma, then ask for an explanation, rewrite, plan, or idea.</p></div>
     </section>
 
     <div id="attachStrip" class="attach-strip hidden" aria-label="Attached images"></div>
     <form id="composer" class="composer">
       <button id="attachButton" class="icon-button" type="button" title="Attach image" aria-label="Attach image" disabled>＋</button>
-      <label class="sr-only" for="promptInput">Message LFM</label>
-      <textarea id="promptInput" rows="1" maxlength="12000" placeholder="Ask LFM something…" disabled></textarea>
+      <label class="sr-only" for="promptInput">Message Gemma</label>
+      <textarea id="promptInput" rows="1" maxlength="12000" placeholder="Ask Gemma something…" disabled></textarea>
       <button id="sendButton" class="send-button" type="submit" disabled aria-label="Send message">↑</button>
     </form>
     <input id="imageInput" class="hidden" type="file" accept="image/*" multiple aria-hidden="true" tabindex="-1">
@@ -74,8 +74,8 @@
         <div class="cfg-ctl"><input id="cfgTopP" type="range" min="0" max="1" step="0.05" aria-label="Top P"><input id="cfgTopPNum" class="cfg-num" type="number" min="0" max="1" step="0.05" aria-label="Top P value"></div></div>
       <div class="cfg-row"><span class="cfg-label">Temperature</span>
         <div class="cfg-ctl"><input id="cfgTemp" type="range" min="0" max="2" step="0.05" aria-label="Temperature"><input id="cfgTempNum" class="cfg-num" type="number" min="0" max="2" step="0.05" aria-label="Temperature value"></div></div>
-      <div class="toggle-row is-disabled"><span>Enable thinking<small>Not supported by LFM 2.5 VL (non-thinking model)</small></span>
-        <button id="cfgThinking" class="toggle" type="button" role="switch" aria-checked="false" aria-label="Enable thinking" disabled><i></i></button></div>
+      <div class="toggle-row"><span>Enable thinking</span>
+        <button id="cfgThinking" class="toggle" type="button" role="switch" aria-checked="false" aria-label="Enable thinking"><i></i></button></div>
       <div class="toggle-row is-disabled"><span>Enable speculative decoding<small>C++ API has it (SessionConfig::SetEnableSpeculativeDecoding) — the browser WebGPU runtime does not implement it yet</small></span>
         <button class="toggle" type="button" role="switch" aria-checked="false" aria-label="Enable speculative decoding" disabled><i></i></button></div>
       <p class="helper">Sampler and thinking changes start a fresh session when you press OK.</p>
