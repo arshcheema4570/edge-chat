@@ -1,6 +1,6 @@
-# Edge Chat — Gemma 4 E2B
+# Edge Chat — LFM 2.5 VL
 
-A lightweight GitHub Pages-ready chat UI for running Gemma 4 E2B locally in a browser with LiteRT-LM Web API and WebGPU.
+A lightweight GitHub Pages-ready chat UI for running LFM 2.5 VL (450M) locally in a browser with LiteRT-LM Web API and WebGPU.
 
 It is installable as a standalone PWA on supported browsers and includes an offline app shell. The model itself still needs to be downloaded once before it can run.
 
@@ -27,7 +27,7 @@ This is a static site. Push the files to a repository, then enable **Settings �
 ## Technical notes
 
 - Uses `Engine.create()` and `engine.createConversation()` from `@litert-lm/core` via jsDelivr ESM.
-- Uses the official web-compatible model: `gemma-4-E2B-it-web.litertlm`.
+- Uses the official web-compatible model: `LFM2.5-VL-450M_int4_fixB.litertlm` (int4, 0.41 GB; fixB build repairs the vision path so the full image is visible).
 - Responses stream through `sendMessageStreaming()`.
 - Inference is local after the model is downloaded; no application server or API key is used.
 - LiteRT-LM Web API is an early preview and currently supports a limited set of web-compatible models.
@@ -36,4 +36,4 @@ Sources:
 
 - https://developers.google.com/edge/litert-lm/js
 - https://github.com/google-ai-edge/LiteRT-LM
-- https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm
+- https://huggingface.co/litert-community/LFM2.5-VL-450M

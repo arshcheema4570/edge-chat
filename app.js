@@ -1,11 +1,11 @@
 import { Engine } from "https://cdn.jsdelivr.net/npm/@litert-lm/core/+esm";
 
-const MODEL_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm";
+const MODEL_URL = "https://huggingface.co/litert-community/LFM2.5-VL-450M/resolve/main/LFM2.5-VL-450M_int4_fixB.litertlm";
 const DEFAULT_SYSTEM_PROMPT = "You are a concise, helpful assistant running privately on the user's device.";
 const HISTORY_KEY = "edgechat.history.v1";
 const SETTINGS_KEY = "edgechat.settings.v1";
 const MAX_HISTORY = 30;
-const MAX_ATTACH = 4;
+const MAX_ATTACH = 1; // LFM2.5-VL supports a single image per prompt
 
 const $ = (id) => document.getElementById(id);
 const loadButton = $("loadButton");
@@ -140,7 +140,7 @@ function renderEmptyState() {
   const state = document.createElement("div");
   state.className = "empty-state";
   state.id = "emptyState";
-  state.innerHTML = '<span class="empty-icon" aria-hidden="true">◌</span><h2>Private chat, local model</h2><p>Ask Gemma for an explanation, rewrite, plan, or idea.</p>';
+  state.innerHTML = '<span class="empty-icon" aria-hidden="true">◌</span><h2>Private chat, local model</h2><p>Ask LFM for an explanation, rewrite, plan, or idea.</p>';
   chatLog.append(state);
 }
 
@@ -203,7 +203,7 @@ function addMessage(role, opts = {}, { record = true } = {}) {
   node.className = `message ${role}`;
   const label = document.createElement("span");
   label.className = "message-label";
-  label.textContent = role === "user" ? "You" : "Gemma";
+  label.textContent = role === "user" ? "You" : "LFM";
   node.append(label);
   if (images.length) {
     const wrap = document.createElement("div");
@@ -475,7 +475,7 @@ async function applySettings() {
     topK: Math.max(1, Math.min(100, int(cfg.topK[1].value, 64))),
     topP: Math.max(0, Math.min(1, num(cfg.topP[1].value, 0.95))),
     temperature: Math.max(0, Math.min(2, num(cfg.temp[1].value, 1))),
-    enableThinking: $("cfgThinking").getAttribute("aria-checked") === "true",
+    enableThinking: false, // LFM2.5-VL is a non-thinking model; toggle disabled in UI
   };
   saveSettings();
   closeSettings();
@@ -546,4 +546,4 @@ promptInput.addEventListener("keydown", (event) => {
 window.addEventListener("beforeunload", () => { engine?.delete?.(); });
 
 renderHistoryList();
-setStatus("idle", "Model not loaded", "Load Gemma to begin. The model runs locally with WebGPU.");
+setStatus("idle", "Model not loaded", "Load LFM 2.5 to begin. The model runs locally with WebGPU.");

@@ -1,7 +1,7 @@
 {
-  "name": "Edge Chat — Gemma 4 E2B",
+  "name": "Edge Chat — LFM 2.5 VL",
   "short_name": "Edge Chat",
-  "description": "Private, local Gemma 4 E2B chat powered by LiteRT-LM.",
+  "description": "Private, local LFM 2.5 VL chat powered by LiteRT-LM.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
