@@ -2,6 +2,8 @@
 
 A lightweight GitHub Pages-ready chat UI for running Gemma 4 E2B locally in a browser with LiteRT-LM Web API and WebGPU.
 
+It is installable as a standalone PWA on supported browsers and includes an offline app shell. The model itself still needs to be downloaded once before it can run.
+
 ## Requirements
 
 - Current Chrome or Edge with WebGPU enabled
@@ -15,6 +17,8 @@ python3 -m http.server 4179
 ```
 
 Open `http://localhost:4179/` in a WebGPU-capable browser. The model is downloaded from the official LiteRT Community Hugging Face repository when **Load model** is clicked.
+
+Use the **Install** button when offered, or the browser menu's **Install Edge Chat / Add to Home Screen** action.
 
 ## Deploy to GitHub Pages
 

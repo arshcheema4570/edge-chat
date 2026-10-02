@@ -4,6 +4,7 @@ const MODEL_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert
 const $ = (id) => document.getElementById(id);
 const loadButton = $("loadButton");
 const clearButton = $("clearButton");
+const installButton = $("installButton");
 const promptInput = $("promptInput");
 const sendButton = $("sendButton");
 const composer = $("composer");
@@ -17,6 +18,12 @@ const loadMessage = $("loadMessage");
 let engine = null;
 let conversation = null;
 let generating = false;
+let deferredInstallPrompt = null;
+
+function isStandalone() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+function showInstallButton(show) { installButton.classList.toggle("hidden", !show || isStandalone()); }
 
 function setStatus(state, text, detail = "") {
   statusDot.dataset.state = state;
@@ -121,6 +128,22 @@ function clearConversation() {
 
 loadButton.addEventListener("click", loadModel);
 clearButton.addEventListener("click", clearConversation);
+installButton.addEventListener("click", async () => {
+  if (!deferredInstallPrompt) {
+    loadMessage.textContent = "Use your browser menu and choose Install Edge Chat or Add to Home Screen.";
+    return;
+  }
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  showInstallButton(false);
+});
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  showInstallButton(true);
+});
+window.addEventListener("appinstalled", () => { deferredInstallPrompt = null; showInstallButton(false); });
 composer.addEventListener("submit", sendMessage);
 promptInput.addEventListener("input", () => { resizeInput(); setComposerEnabled(Boolean(conversation)); });
 promptInput.addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); composer.requestSubmit(); } });
