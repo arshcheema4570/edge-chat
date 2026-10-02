@@ -1,13 +1,13 @@
 import { Engine } from "https://cdn.jsdelivr.net/npm/@litert-lm/core/+esm";
 
-// NOTE: this is the only multimodal bundle the LiteRT-LM *web* runtime can
-// load. Plain .litertlm bundles (e.g. LFM2.5-VL) are native-runtime-only and
-// fail in-browser with "Streaming LlmExecutorMetadata section is not
-// supported yet" — verified on-device. The filename stays; nothing in the UI
-// names it.
-const MODEL_URL = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm";
-const MODEL_FILE = "edge-model.litertlm";
-const MIN_MODEL_BYTES = 1_000_000_000; // sanity floor: partial downloads are discarded
+// EXPERIMENT (per user order, 2026-10-02): SmolVLM2-500M swapped in for an
+// on-device test. Plain .litertlm bundles are expected to fail in-browser
+// with "Streaming LlmExecutorMetadata section is not supported yet" (LFM2.5-VL
+// did, verified on-device); Gemma 4 E2B remains the only web-packaged
+// multimodal bundle known to load. Revert to it if this fails the same way.
+const MODEL_URL = "https://huggingface.co/litert-community/SmolVLM2-500M/resolve/main/SmolVLM2-500M.litertlm";
+const MODEL_FILE = "edge-model-smolvlm.litertlm"; // new name: don't pick up the stored Gemma bundle
+const MIN_MODEL_BYTES = 300_000_000; // sanity floor: partial downloads are discarded
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [2000, 5000, 12000];
 
@@ -144,7 +144,7 @@ async function boot() {
       setStatus("loading", "Loading model", "Found the stored model. Initializing…");
       setProgress(55);
     } else {
-      setStatus("loading", "Downloading model", "First run downloads ~2.6 GB once, then it lives on this device.");
+      setStatus("loading", "Downloading model", "First run downloads ~0.4 GB once, then it lives on this device.");
       modelSource = await withRetry(
         () => downloadModel((pct) => { setProgress(Math.round(pct * 0.9)); setStatus("loading", "Downloading model", `Downloaded ${pct}% — keep this tab open.`); }),
         "Downloading model"
