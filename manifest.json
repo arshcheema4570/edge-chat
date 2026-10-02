@@ -1,17 +1,1 @@
-{
-  "name": "Edge Chat — Gemma 4 E2B",
-  "short_name": "Edge Chat",
-  "description": "Private, local Gemma 4 E2B chat powered by LiteRT-LM.",
-  "start_url": "./",
-  "scope": "./",
-  "display": "standalone",
-  "orientation": "portrait",
-  "theme_color": "#0b0c0f",
-  "background_color": "#0b0c0f",
-  "categories": ["education", "productivity"],
-  "icons": [
-    {"src":"./icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
-    {"src":"./icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"},
-    {"src":"./icons/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}
-  ]
-}
+{"background_color":"#0b0c0f","description":"Private, on-device chat powered by LiteRT-LM.","display":"standalone","icons":[],"name":"Edge Chat","scope":"./","short_name":"Edge Chat","start_url":"./","theme_color":"#0b0c0f"}
