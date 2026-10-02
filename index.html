@@ -76,7 +76,7 @@
         <div class="cfg-ctl"><input id="cfgTemp" type="range" min="0" max="2" step="0.05" aria-label="Temperature"><input id="cfgTempNum" class="cfg-num" type="number" min="0" max="2" step="0.05" aria-label="Temperature value"></div></div>
       <div class="toggle-row"><span>Enable thinking</span>
         <button id="cfgThinking" class="toggle" type="button" role="switch" aria-checked="false" aria-label="Enable thinking"><i></i></button></div>
-      <div class="toggle-row is-disabled"><span>Enable speculative decoding<small>Not exposed by the LiteRT-LM web runtime yet</small></span>
+      <div class="toggle-row is-disabled"><span>Enable speculative decoding<small>C++ API has it (SessionConfig::SetEnableSpeculativeDecoding) — the browser WebGPU runtime does not implement it yet</small></span>
         <button class="toggle" type="button" role="switch" aria-checked="false" aria-label="Enable speculative decoding" disabled><i></i></button></div>
       <p class="helper">Sampler and thinking changes start a fresh session when you press OK.</p>
     </div>
