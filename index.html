@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0c0f">
+  <meta name="description" content="Private, local Gemma 4 E2B chat in your browser with LiteRT-LM.">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./styles.css?v=1">
+  <title>Edge Chat — Gemma 4 E2B</title>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">✦</span><div><strong>Edge Chat</strong><span>Gemma 4 E2B · LiteRT-LM</span></div></div>
+      <button id="clearButton" class="icon-button" type="button" title="Clear conversation" aria-label="Clear conversation">⌫</button>
+    </header>
+
+    <section class="model-card" aria-labelledby="modelTitle">
+      <div class="model-card-head"><div><p class="eyebrow">On-device AI</p><h1 id="modelTitle">Gemma 4 E2B</h1><p class="muted">Runs locally in this browser with WebGPU. Your messages stay on this device.</p></div><span id="statusDot" class="status-dot" data-state="idle" aria-label="Model not loaded"></span></div>
+      <div class="model-meta"><span id="statusText">Model not loaded</span><span>~2.6 GB download</span></div>
+      <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
+      <button id="loadButton" class="primary-button" type="button">Load model</button>
+      <p id="loadMessage" class="helper" role="status">The first load can take a few minutes. Keep this tab open.</p>
+    </section>
+
+    <section id="chatLog" class="chat-log" aria-live="polite" aria-label="Conversation">
+      <div class="empty-state" id="emptyState"><span class="empty-icon" aria-hidden="true">◌</span><h2>Private chat, local model</h2><p>Load Gemma, then ask for an explanation, rewrite, plan, or idea.</p></div>
+    </section>
+
+    <form id="composer" class="composer">
+      <label class="sr-only" for="promptInput">Message Gemma</label>
+      <textarea id="promptInput" rows="1" maxlength="12000" placeholder="Ask Gemma something…" disabled></textarea>
+      <button id="sendButton" class="send-button" type="submit" disabled aria-label="Send message">↑</button>
+    </form>
+    <p class="footer-note">Local inference · No account · No cloud API key</p>
+  </main>
+  <script type="module" src="./app.js?v=1"></script>
+  <script>if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));</script>
+</body>
+</html>

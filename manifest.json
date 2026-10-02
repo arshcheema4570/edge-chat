@@ -1,0 +1,11 @@
+{
+  "name": "Edge Chat — Gemma 4 E2B",
+  "short_name": "Edge Chat",
+  "description": "Private, local Gemma 4 E2B chat powered by LiteRT-LM.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#0b0c0f",
+  "background_color": "#0b0c0f",
+  "icons": []
+}
