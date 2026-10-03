@@ -1,16 +1,18 @@
-import { Engine } from "https://cdn.jsdelivr.net/npm/@litert-lm/core/+esm";
+// Edge Chat — Bonsai 1.7B (1-bit) on WebGPU, with self-improving memory.
+//
+// Memory model:
+// - Short-term: sliding window of recent turns (in memory only). Pruned FIFO,
+//   wiped entirely when the conversation is cleared.
+// - Long-term: durable user facts in localStorage, extracted by the model
+//   itself every few exchanges, deduplicated, and injected into future
+//   prompts. This is what compounds: the model never changes, but the
+//   facts it reasons with grow — output quality rises with use.
 
-// EXPERIMENT (per user order, 2026-10-02): SmolVLM2-500M swapped in for an
-// on-device test. Plain .litertlm bundles are expected to fail in-browser
-// with "Streaming LlmExecutorMetadata section is not supported yet" (LFM2.5-VL
-// did, verified on-device); Gemma 4 E2B remains the only web-packaged
-// multimodal bundle known to load. Revert to it if this fails the same way.
-const MODEL_URL = "https://huggingface.co/litert-community/SmolVLM2-500M/resolve/main/SmolVLM2-500M.litertlm";
-const MODEL_FILE = "edge-model-smolvlm.litertlm"; // new name: don't pick up the stored Gemma bundle
-const MIN_MODEL_BYTES = 300_000_000; // sanity floor: partial downloads are discarded
-const MAX_RETRIES = 3;
-const RETRY_DELAYS = [2000, 5000, 12000];
-const DOWNLOAD_PARTS = 8; // parallel Range-request chunks: multiplies throughput on the same connection
+const STM_MAX_MESSAGES = 16; // short-term window: last 8 exchanges, FIFO
+const EXTRACT_EVERY = 4; // run fact extraction every N exchanges
+const LTM_KEY = "edgechat.ltm.v1";
+const LTM_MAX_FACTS = 200;
+const LTM_TOP_K = 5; // facts injected per prompt
 
 const $ = (id) => document.getElementById(id);
 const retryButton = $("retryButton");
@@ -23,20 +25,35 @@ const statusDot = $("statusDot");
 const progressBar = $("progressBar");
 const loadMessage = $("loadMessage");
 
-let engine = null;
-let conversation = null;
+let worker = null;
+let ready = false;
 let generating = false;
+let extracting = false;
 let booted = false;
+let stm = []; // [{role, content}] — short-term, memory only
+let exchanges = 0;
+let tagSeq = 0;
+const pending = new Map(); // tag -> { resolve, onChunk, acc }
+let factCache = loadLtm();
 
+// ---- UI helpers -------------------------------------------------------------
 function setStatus(state, text, detail = "") {
   statusDot.dataset.state = state;
   statusDot.setAttribute("aria-label", text);
   statusText.textContent = text;
   if (detail) loadMessage.textContent = detail;
 }
-function setProgress(value) { progressBar.style.width = `${Math.max(0, Math.min(100, value))}%`; }
-function showRetry(show) { retryButton.classList.toggle("hidden", !show); }
-
+function setProgress(value) {
+  progressBar.style.width = `${Math.max(0, Math.min(100, value))}%`;
+}
+function showRetry(show) {
+  retryButton.classList.toggle("hidden", !show);
+}
+function memoryLine() {
+  return factCache.length
+    ? `Everything runs on this device. ${factCache.length} facts remembered.`
+    : "Everything runs on this device. No message leaves it.";
+}
 function addMessage(role, text = "") {
   document.getElementById("emptyState")?.remove();
   const node = document.createElement("article");
@@ -57,240 +74,202 @@ function setComposerEnabled(enabled) {
   sendButton.disabled = !enabled || !promptInput.value.trim() || generating;
   if (enabled) promptInput.placeholder = "Ask something…";
 }
-function resizeInput() { promptInput.style.height = "auto"; promptInput.style.height = `${Math.min(promptInput.scrollHeight, 160)}px`; }
-
-// ---- Local model store (Origin Private File System) -------------------------
-async function opfsDir() {
-  if (!navigator.storage?.getDirectory) return null;
-  try { return await navigator.storage.getDirectory(); }
-  catch { return null; }
+function resizeInput() {
+  promptInput.style.height = "auto";
+  promptInput.style.height = `${Math.min(promptInput.scrollHeight, 160)}px`;
 }
-async function storedModelFile() {
-  const dir = await opfsDir();
-  if (!dir) return null;
+
+// ---- Long-term memory -------------------------------------------------------
+function loadLtm() {
   try {
-    const handle = await dir.getFileHandle(MODEL_FILE);
-    const file = await handle.getFile();
-    if (file.size >= MIN_MODEL_BYTES) return file;
-    await dir.removeEntry(MODEL_FILE); // partial download: discard
-    return null;
-  } catch { return null; }
+    return JSON.parse(localStorage.getItem(LTM_KEY)) ?? [];
+  } catch {
+    return [];
+  }
 }
-async function downloadModel(onProgress) {
-  const dir = await opfsDir();
-  const probe = await probeParallelDownload();
-  if (dir && probe) return downloadModelParallel(dir, probe.total, onProgress);
-  return downloadModelSingle(dir, onProgress);
-}
-
-// HEAD gives the total size (Content-Length is CORS-visible); a 1-byte Range
-// request proves the server honors ranges (status is always visible, no need
-// to read the non-exposed Content-Range header).
-async function probeParallelDownload() {
+function saveLtm() {
   try {
-    const head = await fetch(MODEL_URL, { method: "HEAD" });
-    const total = Number(head.headers.get("content-length")) || 0;
-    try { await head.arrayBuffer(); } catch { /* HEAD has no body */ }
-    if (!head.ok || total <= 0) return null;
-    const probe = await fetch(MODEL_URL, { headers: { Range: "bytes=0-0" } });
-    const ranges = probe.status === 206;
-    try { if (ranges) await probe.arrayBuffer(); else await probe.body?.cancel(); } catch { /* ignore */ }
-    return ranges ? { total } : null;
-  } catch { return null; }
-}
-
-async function downloadPart(dir, name, start, end, onBytes) {
-  let lastError = null;
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    try {
-      try { await dir.removeEntry(name); } catch { /* fresh part */ }
-      const res = await fetch(MODEL_URL, { headers: { Range: `bytes=${start}-${end}` } });
-      if (res.status !== 206 || !res.body) throw new Error(`Part failed (HTTP ${res.status})`);
-      const handle = await dir.getFileHandle(name, { create: true });
-      const writable = await handle.createWritable();
-      try {
-        const reader = res.body.getReader();
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          await writable.write(value);
-          onBytes(value.byteLength);
-        }
-        await writable.close();
-      } catch (error) {
-        try { await writable.abort(); } catch { /* ignore */ }
-        throw error;
-      }
-      return;
-    } catch (error) {
-      lastError = error;
-      if (attempt < MAX_RETRIES - 1) await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
-    }
+    localStorage.setItem(LTM_KEY, JSON.stringify(factCache));
+  } catch {
+    /* storage full or unavailable: memory simply doesn't persist */
   }
-  throw lastError;
 }
-
-async function downloadModelParallel(dir, total, onProgress) {
-  const received = new Array(DOWNLOAD_PARTS).fill(0);
-  let lastPct = -1;
-  const report = () => {
-    const pct = Math.min(100, Math.floor((received.reduce((a, b) => a + b, 0) / total) * 100));
-    if (pct !== lastPct) { lastPct = pct; onProgress(pct); }
-  };
-  const partSize = Math.ceil(total / DOWNLOAD_PARTS);
-  const partName = (i) => `${MODEL_FILE}.part${i}`;
-  const cleanParts = async () => {
-    for (let i = 0; i < DOWNLOAD_PARTS; i++) { try { await dir.removeEntry(partName(i)); } catch { /* ignore */ } }
-  };
+function tokens(s) {
+  return s.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3);
+}
+// Retrieve the facts most relevant to the current query (keyword overlap).
+function relevantFacts(query, k) {
+  const q = new Set(tokens(query));
+  if (!q.size || !factCache.length) return [];
+  return factCache
+    .map((f) => ({ f, score: tokens(f.fact).filter((w) => q.has(w)).length }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || b.f.uses - a.f.uses)
+    .slice(0, k)
+    .map((x) => x.f);
+}
+function isDuplicateFact(fact) {
+  const norm = fact.toLowerCase();
+  const bt = new Set(tokens(norm));
+  return factCache.some((f) => {
+    const a = f.fact.toLowerCase();
+    if (a === norm) return true;
+    const at = new Set(tokens(a));
+    const inter = [...at].filter((w) => bt.has(w)).length;
+    return inter / Math.max(at.size, bt.size, 1) > 0.75;
+  });
+}
+function buildSystemPrompt(query) {
+  let p = "You are a concise, helpful assistant running privately on the user's device.";
+  const facts = relevantFacts(query, LTM_TOP_K);
+  if (facts.length) {
+    facts.forEach((f) => f.uses++);
+    saveLtm();
+    p += "\nFacts about the user:\n" + facts.map((f) => `- ${f.fact}`).join("\n");
+  }
+  return p;
+}
+// Ask the model to distill durable facts from recent turns. Runs in the
+// background after every EXTRACT_EVERY exchanges; never blocks chat.
+async function maybeExtractFacts() {
+  if (extracting || exchanges % EXTRACT_EVERY !== 0 || stm.length < 4) return;
+  extracting = true;
   try {
-    await Promise.all(Array.from({ length: DOWNLOAD_PARTS }, (_, i) => {
-      const start = i * partSize;
-      const end = Math.min(start + partSize, total) - 1;
-      return downloadPart(dir, partName(i), start, end, (n) => { received[i] += n; report(); });
-    }));
-    report();
-    const finalHandle = await dir.getFileHandle(MODEL_FILE, { create: true });
-    const out = await finalHandle.createWritable();
-    try {
-      for (let i = 0; i < DOWNLOAD_PARTS; i++) {
-        const partFile = await (await dir.getFileHandle(partName(i))).getFile();
-        await partFile.stream().pipeTo(out, { preventClose: true });
-      }
-      await out.close();
-    } catch (error) {
-      try { await out.abort(); } catch { /* ignore */ }
-      throw error;
-    }
-    const file = await finalHandle.getFile();
-    if (file.size < MIN_MODEL_BYTES) throw new Error("Download incomplete");
-    await cleanParts();
-    return file;
-  } catch (error) {
-    await cleanParts();
-    try { await dir.removeEntry(MODEL_FILE); } catch { /* ignore */ }
-    throw error;
-  }
-}
-
-// Fallback: original single-stream download for servers without Range support.
-async function downloadModelSingle(dir, onProgress) {
-  const response = await fetch(MODEL_URL);
-  if (!response.ok || !response.body) throw new Error(`Download failed (HTTP ${response.status})`);
-  const total = Number(response.headers.get("content-length")) || 0;
-  const reader = response.body.getReader();
-  let writable = null;
-  if (dir) {
-    const handle = await dir.getFileHandle(MODEL_FILE, { create: true });
-    writable = await handle.createWritable();
-  }
-  const chunks = [];
-  let received = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      received += value.byteLength;
-      if (writable) await writable.write(value);
-      else chunks.push(value);
-      if (total) onProgress(Math.round((received / total) * 100));
-    }
-    if (writable) {
-      await writable.close();
-      const file = await (await dir.getFileHandle(MODEL_FILE)).getFile();
-      if (file.size < MIN_MODEL_BYTES) throw new Error("Download incomplete");
-      return file;
-    }
-    return new Blob(chunks, { type: "application/octet-stream" });
-  } catch (error) {
-    try { await writable?.abort(); } catch { /* ignore */ }
-    try { await dir?.removeEntry(MODEL_FILE); } catch { /* ignore */ }
-    throw error;
-  }
-}
-async function withRetry(task, label) {
-  let lastError = null;
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    try { return await task(); }
-    catch (error) {
-      lastError = error;
-      if (attempt < MAX_RETRIES - 1) {
-        setStatus("loading", label, `Attempt ${attempt + 1} failed (${error?.message || "network error"}). Retrying…`);
-        await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
-      }
-    }
-  }
-  throw lastError;
-}
-
-// ---- Background boot: everything happens without user interaction -----------
-async function boot() {
-  if (booted) return;
-  booted = true;
-  showRetry(false);
-  if (!navigator.gpu) {
-    setStatus("error", "WebGPU unavailable", "Open this app in a current Chrome or Edge browser with WebGPU enabled.");
-    return;
-  }
-  try { await navigator.storage?.persist?.(); } catch { /* optional */ }
-
-  try {
-    setStatus("loading", "Preparing", "Checking for the local model…");
-    setProgress(4);
-    let modelSource = await storedModelFile();
-    if (modelSource) {
-      setStatus("loading", "Loading model", "Found the stored model. Initializing…");
-      setProgress(55);
-    } else {
-      setStatus("loading", "Downloading model", "First run downloads ~0.4 GB once, then it lives on this device.");
-      modelSource = await withRetry(
-        () => downloadModel((pct) => { setProgress(Math.round(pct * 0.9)); setStatus("loading", "Downloading model", `Downloaded ${pct}% — keep this tab open.`); }),
-        "Downloading model"
-      );
-      setProgress(92);
-    }
-    setStatus("loading", "Starting engine", "Initializing WebGPU inference…");
-    engine = await withRetry(
-      () => Engine.create({ model: modelSource, mainExecutorSettings: { maxNumTokens: 8192 } }),
-      "Starting engine"
+    const convo = stm
+      .slice(-8)
+      .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+      .join("\n");
+    const text = await runGenerate(
+      [
+        {
+          role: "user",
+          content:
+            "Extract durable facts about the user from this conversation (preferences, goals, personal details, recurring topics). " +
+            "One fact per line, each starting with '- '. If there is nothing durable, reply exactly: none\n\n" +
+            convo,
+        },
+      ],
+      { maxTokens: 160, silent: true }
     );
-    conversation = await engine.createConversation({
-      preface: {
-        messages: [{ role: "system", content: "You are a concise, helpful assistant running privately on the user's device." }],
-      },
-      sessionConfig: { maxOutputTokens: 2048 },
-    });
-    setProgress(100);
-    setStatus("ready", "Ready", "Everything runs on this device. No message leaves it.");
-    setComposerEnabled(true);
-    promptInput.focus();
-  } catch (error) {
-    engine = null;
-    conversation = null;
-    setProgress(0);
-    setStatus("error", "Couldn't start", `${error?.message || "Unknown error"}. Check your connection and retry.`);
-    showRetry(true);
+    if (!text || /^none\b/i.test(text.trim())) return;
+    let added = 0;
+    for (const line of text.split("\n")) {
+      const fact = line.replace(/^[-\s*•]+/, "").trim();
+      if (!fact || fact.length < 8 || fact.length > 220) continue;
+      if (/^(none|no durable|no facts)/i.test(fact)) continue;
+      if (isDuplicateFact(fact)) continue;
+      factCache.push({ fact, addedAt: Date.now(), uses: 0 });
+      added++;
+    }
+    if (added > 0) {
+      factCache = factCache.slice(-LTM_MAX_FACTS);
+      saveLtm();
+      if (ready && !generating) setStatus("ready", "Ready", memoryLine());
+    }
+  } catch {
+    /* extraction is best-effort; chat is unaffected */
+  } finally {
+    extracting = false;
   }
 }
 
+// ---- Worker plumbing --------------------------------------------------------
+function runGenerate(messages, { maxTokens = 1024, silent = false, onChunk = null } = {}) {
+  const tag = `t${++tagSeq}`;
+  return new Promise((resolve) => {
+    pending.set(tag, { resolve, onChunk, acc: "", silent });
+    worker.postMessage({ type: "generate", messages, maxTokens, tag });
+  });
+}
+function onWorkerMessage(e) {
+  const m = e.data ?? {};
+  switch (m.status) {
+    case "gpu-ok":
+      setStatus("loading", "Downloading model", "First run downloads it once (~0.3 GB), then it lives on this device.");
+      worker.postMessage({ type: "load" });
+      break;
+    case "progress":
+      setProgress(m.progress);
+      break;
+    case "loading":
+      setStatus("loading", "Loading model", m.data || "");
+      break;
+    case "ready":
+      ready = true;
+      setProgress(100);
+      setStatus("ready", "Ready", memoryLine());
+      setComposerEnabled(true);
+      promptInput.focus();
+      break;
+    case "start":
+      break;
+    case "update": {
+      const p = pending.get(m.tag);
+      if (p && !p.silent) {
+        p.acc += m.chunk ?? "";
+        p.onChunk?.(p.acc);
+      }
+      break;
+    }
+    case "complete": {
+      const p = pending.get(m.tag);
+      pending.delete(m.tag);
+      p?.resolve(m.text ?? "");
+      break;
+    }
+    case "error": {
+      const p = pending.get(m.tag);
+      pending.delete(m.tag);
+      if (p) p.resolve(""); // background/extraction failure: resolve empty, never throw
+      else {
+        setStatus("error", "Couldn't start", m.data || "Unknown error.");
+        showRetry(true);
+      }
+      break;
+    }
+    case "fatal":
+      ready = false;
+      setProgress(0);
+      setStatus("error", "Couldn't start", m.data || "Unknown error.");
+      showRetry(true);
+      break;
+  }
+}
+
+// ---- Chat -------------------------------------------------------------------
 async function sendMessage(event) {
   event?.preventDefault();
   const text = promptInput.value.trim();
-  if (!text || !conversation || generating) return;
+  if (!text || !ready || generating) return;
   promptInput.value = "";
   resizeInput();
   addMessage("user", text);
-  const responseBody = addMessage("assistant", "");
+  const body = addMessage("assistant", "");
   generating = true;
-  setComposerEnabled(true);
+  setComposerEnabled(false);
+  setStatus("loading", "Thinking", "");
+  const messages = [
+    { role: "system", content: buildSystemPrompt(text) },
+    ...stm,
+    { role: "user", content: text },
+  ];
   try {
-    for await (const chunk of conversation.sendMessageStreaming(text)) {
-      for (const item of chunk.content ?? []) {
-        if (item.type === "text") responseBody.textContent += item.text;
-      }
-      chatLog.scrollTop = chatLog.scrollHeight;
+    const full = await runGenerate(messages, {
+      onChunk: (acc) => {
+        body.textContent = acc;
+        chatLog.scrollTop = chatLog.scrollHeight;
+      },
+    });
+    if (full) {
+      body.textContent = full; // authoritative final text
+      stm.push({ role: "user", content: text }, { role: "assistant", content: full });
+      stm = stm.slice(-STM_MAX_MESSAGES); // short-term window: FIFO prune
+      exchanges++;
+    } else {
+      body.textContent = "Generation failed — try again.";
     }
-  } catch (error) {
-    responseBody.textContent = `Generation error: ${error?.message || "unknown error"}`;
+    setStatus("ready", "Ready", memoryLine());
+    maybeExtractFacts(); // background; never blocks
   } finally {
     generating = false;
     setComposerEnabled(true);
@@ -299,30 +278,74 @@ async function sendMessage(event) {
 }
 function clearConversation() {
   if (generating) return;
-  conversation?.cancel?.();
-  engine?.createConversation({
-    preface: {
-      messages: [{ role: "system", content: "You are a concise, helpful assistant running privately on the user's device." }],
-    },
-    sessionConfig: { maxOutputTokens: 2048 },
-  }).then((c) => { conversation = c; }).catch(() => {});
+  stm = []; // short-term memory wiped; long-term facts persist
+  worker?.postMessage({ type: "reset" });
   chatLog.replaceChildren();
   const state = document.createElement("div");
   state.className = "empty-state";
   state.id = "emptyState";
-  state.innerHTML = '<span class="empty-icon" aria-hidden="true">◌</span><h2>Private chat, local model</h2><p>Ask for an explanation, rewrite, plan, or idea.</p>';
+  state.innerHTML =
+    '<span class="empty-icon" aria-hidden="true">◌</span><h2>Private chat, local model</h2><p>Ask for an explanation, rewrite, plan, or idea.</p>';
   chatLog.append(state);
+  if (ready) setStatus("ready", "Ready", memoryLine());
+}
+
+// ---- Boot -------------------------------------------------------------------
+function boot() {
+  if (booted) return;
+  booted = true;
+  showRetry(false);
+  setStatus("loading", "Starting", "Checking WebGPU…");
+  setProgress(4);
+  try {
+    worker?.terminate();
+  } catch {
+    /* ignore */
+  }
+  try {
+    worker = new Worker("./bonsai-worker.js", { type: "module" });
+  } catch {
+    setStatus("error", "Couldn't start", "Workers unavailable in this browser.");
+    showRetry(true);
+    return;
+  }
+  worker.onmessage = onWorkerMessage;
+  worker.onerror = () => {
+    setProgress(0);
+    setStatus("error", "Couldn't start", "Inference worker failed to load. Check your connection and retry.");
+    showRetry(true);
+  };
+  worker.postMessage({ type: "check" });
 }
 
 document.getElementById("clearButton").addEventListener("click", clearConversation);
 composer.addEventListener("submit", sendMessage);
-promptInput.addEventListener("input", () => { resizeInput(); setComposerEnabled(Boolean(conversation)); });
-promptInput.addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); composer.requestSubmit(); } });
-retryButton.addEventListener("click", () => { booted = false; boot(); });
-window.addEventListener("beforeunload", () => { engine?.delete?.(); });
-window.addEventListener("online", () => { if (!engine && !booted) boot(); });
+promptInput.addEventListener("input", () => {
+  resizeInput();
+  setComposerEnabled(ready);
+});
+promptInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    composer.requestSubmit();
+  }
+});
+retryButton.addEventListener("click", () => {
+  booted = false;
+  boot();
+});
+window.addEventListener("beforeunload", () => {
+  try {
+    worker?.terminate();
+  } catch {
+    /* ignore */
+  }
+});
+window.addEventListener("online", () => {
+  if (!ready && !booted) boot();
+});
 
 // Start in the background after first paint; the UI never blocks on the model.
 if ("requestIdleCallback" in window) requestIdleCallback(() => boot(), { timeout: 1500 });
 else setTimeout(boot, 300);
-setStatus("idle", "Starting", "The model loads in the background.");
+setStatus("loading", "Starting", "The model loads in the background.");

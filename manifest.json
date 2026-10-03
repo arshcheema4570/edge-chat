@@ -1,1 +1,1 @@
-{"background_color":"#0b0c0f","description":"Private, on-device chat powered by LiteRT-LM.","display":"standalone","icons":[],"name":"Edge Chat","scope":"./","short_name":"Edge Chat","start_url":"./","theme_color":"#0b0c0f"}
+{"background_color":"#0b0c0f","description":"Private, on-device chat with a 1-bit on-device model.","display":"standalone","icons":[],"name":"Edge Chat","scope":"./","short_name":"Edge Chat","start_url":"./","theme_color":"#0b0c0f"}

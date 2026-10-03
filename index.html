@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b0c0f">
-  <meta name="description" content="Private, on-device chat in your browser with LiteRT-LM.">
+  <meta name="description" content="Private, on-device chat in your browser. 1-bit local model on WebGPU.">
   <link rel="manifest" href="./manifest.json">
   <link rel="stylesheet" href="./styles.css?v=2">
   <title>Edge Chat</title>
@@ -12,7 +12,7 @@
 <body>
   <main class="app-shell">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark" aria-hidden="true">✦</span><div><strong>Edge Chat</strong><span>On-device AI · LiteRT-LM</span></div></div>
+      <div class="brand"><span class="brand-mark" aria-hidden="true">✦</span><div><strong>Edge Chat</strong><span>On-device AI · WebGPU</span></div></div>
       <button id="clearButton" class="icon-button" type="button" title="Clear conversation" aria-label="Clear conversation">⌫</button>
     </header>
 
@@ -21,7 +21,7 @@
       <div class="model-meta"><span id="statusText">Starting</span></div>
       <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
       <button id="retryButton" class="primary-button hidden" type="button">Retry</button>
-      <p id="loadMessage" class="helper" role="status">The model loads in the background. The first run downloads it once, then it lives on this device.</p>
+      <p id="loadMessage" class="helper" role="status">The 1-bit model loads in the background. The first run downloads it once (~0.3 GB), then it lives on this device.</p>
     </section>
 
     <section id="chatLog" class="chat-log" aria-live="polite" aria-label="Conversation">
@@ -35,7 +35,7 @@
     </form>
     <p class="footer-note">Local inference · No account · No cloud API key</p>
   </main>
-  <script type="module" src="./app.js?v=2"></script>
+  <script type="module" src="./app.js?v=3"></script>
   <script>if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));</script>
 </body>
 </html>
