@@ -10,6 +10,7 @@ const MODEL_FILE = "edge-model-smolvlm.litertlm"; // new name: don't pick up the
 const MIN_MODEL_BYTES = 300_000_000; // sanity floor: partial downloads are discarded
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [2000, 5000, 12000];
+const DOWNLOAD_PARTS = 8; // parallel Range-request chunks: multiplies throughput on the same connection
 
 const $ = (id) => document.getElementById(id);
 const retryButton = $("retryButton");
@@ -77,6 +78,102 @@ async function storedModelFile() {
 }
 async function downloadModel(onProgress) {
   const dir = await opfsDir();
+  const probe = await probeParallelDownload();
+  if (dir && probe) return downloadModelParallel(dir, probe.total, onProgress);
+  return downloadModelSingle(dir, onProgress);
+}
+
+// HEAD gives the total size (Content-Length is CORS-visible); a 1-byte Range
+// request proves the server honors ranges (status is always visible, no need
+// to read the non-exposed Content-Range header).
+async function probeParallelDownload() {
+  try {
+    const head = await fetch(MODEL_URL, { method: "HEAD" });
+    const total = Number(head.headers.get("content-length")) || 0;
+    try { await head.arrayBuffer(); } catch { /* HEAD has no body */ }
+    if (!head.ok || total <= 0) return null;
+    const probe = await fetch(MODEL_URL, { headers: { Range: "bytes=0-0" } });
+    const ranges = probe.status === 206;
+    try { if (ranges) await probe.arrayBuffer(); else await probe.body?.cancel(); } catch { /* ignore */ }
+    return ranges ? { total } : null;
+  } catch { return null; }
+}
+
+async function downloadPart(dir, name, start, end, onBytes) {
+  let lastError = null;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      try { await dir.removeEntry(name); } catch { /* fresh part */ }
+      const res = await fetch(MODEL_URL, { headers: { Range: `bytes=${start}-${end}` } });
+      if (res.status !== 206 || !res.body) throw new Error(`Part failed (HTTP ${res.status})`);
+      const handle = await dir.getFileHandle(name, { create: true });
+      const writable = await handle.createWritable();
+      try {
+        const reader = res.body.getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          await writable.write(value);
+          onBytes(value.byteLength);
+        }
+        await writable.close();
+      } catch (error) {
+        try { await writable.abort(); } catch { /* ignore */ }
+        throw error;
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < MAX_RETRIES - 1) await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
+    }
+  }
+  throw lastError;
+}
+
+async function downloadModelParallel(dir, total, onProgress) {
+  const received = new Array(DOWNLOAD_PARTS).fill(0);
+  let lastPct = -1;
+  const report = () => {
+    const pct = Math.min(100, Math.floor((received.reduce((a, b) => a + b, 0) / total) * 100));
+    if (pct !== lastPct) { lastPct = pct; onProgress(pct); }
+  };
+  const partSize = Math.ceil(total / DOWNLOAD_PARTS);
+  const partName = (i) => `${MODEL_FILE}.part${i}`;
+  const cleanParts = async () => {
+    for (let i = 0; i < DOWNLOAD_PARTS; i++) { try { await dir.removeEntry(partName(i)); } catch { /* ignore */ } }
+  };
+  try {
+    await Promise.all(Array.from({ length: DOWNLOAD_PARTS }, (_, i) => {
+      const start = i * partSize;
+      const end = Math.min(start + partSize, total) - 1;
+      return downloadPart(dir, partName(i), start, end, (n) => { received[i] += n; report(); });
+    }));
+    report();
+    const finalHandle = await dir.getFileHandle(MODEL_FILE, { create: true });
+    const out = await finalHandle.createWritable();
+    try {
+      for (let i = 0; i < DOWNLOAD_PARTS; i++) {
+        const partFile = await (await dir.getFileHandle(partName(i))).getFile();
+        await partFile.stream().pipeTo(out, { preventClose: true });
+      }
+      await out.close();
+    } catch (error) {
+      try { await out.abort(); } catch { /* ignore */ }
+      throw error;
+    }
+    const file = await finalHandle.getFile();
+    if (file.size < MIN_MODEL_BYTES) throw new Error("Download incomplete");
+    await cleanParts();
+    return file;
+  } catch (error) {
+    await cleanParts();
+    try { await dir.removeEntry(MODEL_FILE); } catch { /* ignore */ }
+    throw error;
+  }
+}
+
+// Fallback: original single-stream download for servers without Range support.
+async function downloadModelSingle(dir, onProgress) {
   const response = await fetch(MODEL_URL);
   if (!response.ok || !response.body) throw new Error(`Download failed (HTTP ${response.status})`);
   const total = Number(response.headers.get("content-length")) || 0;
