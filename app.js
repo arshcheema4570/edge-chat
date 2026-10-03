@@ -15,6 +15,8 @@ const LTM_MAX_FACTS = 200;
 const LTM_TOP_K = 5; // facts injected per prompt
 
 const $ = (id) => document.getElementById(id);
+const clearButton = $("clearButton");
+const memoryButton = $("memoryButton");
 const retryButton = $("retryButton");
 const promptInput = $("promptInput");
 const sendButton = $("sendButton");
@@ -24,6 +26,7 @@ const statusText = $("statusText");
 const statusDot = $("statusDot");
 const progressBar = $("progressBar");
 const loadMessage = $("loadMessage");
+const memoryStatus = $("memoryStatus");
 
 let worker = null;
 let ready = false;
@@ -53,6 +56,11 @@ function memoryLine() {
   return factCache.length
     ? `Everything runs on this device. ${factCache.length} facts remembered.`
     : "Everything runs on this device. No message leaves it.";
+}
+function updateMemoryStatus() {
+  memoryStatus.textContent = factCache.length
+    ? `${factCache.length} remembered fact${factCache.length === 1 ? "" : "s"}`
+    : "No remembered facts";
 }
 function addMessage(role, text = "") {
   document.getElementById("emptyState")?.remove();
@@ -185,7 +193,7 @@ function onWorkerMessage(e) {
   const m = e.data ?? {};
   switch (m.status) {
     case "gpu-ok":
-      setStatus("loading", "Downloading model", "First run downloads it once (~0.3 GB), then it lives on this device.");
+      setStatus("loading", "Downloading model", `${m.data ? `WebGPU adapter: ${m.data}. ` : ""}First run downloads Bonsai once (~0.3 GB), then it lives on this device.`);
       worker.postMessage({ type: "load" });
       break;
     case "progress":
@@ -289,6 +297,17 @@ function clearConversation() {
   chatLog.append(state);
   if (ready) setStatus("ready", "Ready", memoryLine());
 }
+function forgetMemory() {
+  if (!factCache.length) {
+    loadMessage.textContent = "There are no remembered facts to forget.";
+    return;
+  }
+  if (!window.confirm(`Forget ${factCache.length} durable fact${factCache.length === 1 ? "" : "s"}? Your current chat will remain.`)) return;
+  factCache = [];
+  saveLtm();
+  updateMemoryStatus();
+  if (ready) setStatus("ready", "Ready", "Durable memory cleared. Current chat remains available.");
+}
 
 // ---- Boot -------------------------------------------------------------------
 function boot() {
@@ -318,7 +337,8 @@ function boot() {
   worker.postMessage({ type: "check" });
 }
 
-document.getElementById("clearButton").addEventListener("click", clearConversation);
+clearButton.addEventListener("click", clearConversation);
+memoryButton.addEventListener("click", forgetMemory);
 composer.addEventListener("submit", sendMessage);
 promptInput.addEventListener("input", () => {
   resizeInput();
@@ -346,6 +366,7 @@ window.addEventListener("online", () => {
 });
 
 // Start in the background after first paint; the UI never blocks on the model.
+updateMemoryStatus();
 if ("requestIdleCallback" in window) requestIdleCallback(() => boot(), { timeout: 1500 });
 else setTimeout(boot, 300);
-setStatus("loading", "Starting", "The model loads in the background.");
+setStatus("loading", "Starting", "Checking WebGPU and device compatibility…");

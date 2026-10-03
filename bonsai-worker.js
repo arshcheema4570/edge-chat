@@ -25,13 +25,15 @@ function overallProgress() {
 
 async function check() {
   try {
-    const adapter = await navigator.gpu?.requestAdapter();
-    if (!adapter) throw new Error("no adapter");
-    self.postMessage({ status: "gpu-ok" });
+    if (!navigator.gpu) throw new Error("WebGPU API is unavailable in this browser");
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) throw new Error("WebGPU is present, but no compatible adapter was found");
+    const info = adapter.info || {};
+    self.postMessage({ status: "gpu-ok", data: [info.vendor, info.architecture, info.device].filter(Boolean).join(" · ") });
   } catch {
     self.postMessage({
       status: "fatal",
-      data: "WebGPU unavailable — open this app in a current Chrome or Edge browser with WebGPU enabled.",
+      data: "WebGPU is unavailable or no compatible adapter was found. Try a current Chrome/Edge browser on a device with WebGPU enabled.",
     });
   }
 }
