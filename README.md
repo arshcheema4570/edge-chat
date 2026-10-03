@@ -16,6 +16,8 @@ Private, on-device chat running the **Bonsai 1.7B ONNX model** with **1-bit `q1`
 4. A one-token warm-up verifies model initialization before chat is enabled.
 5. Responses stream back to the UI while generation is running.
 
+During first load, the app shows downloaded bytes, total bytes, transfer speed, and an estimated time remaining. After the download finishes, it switches to separate **Preparing the GPU** and **GPU warm-up** stages. The progress bar may remain at 99% during this final preparation; that means the file is downloaded and the runtime is initializing it.
+
 The app now displays a clearer adapter failure message. If WebGPU exists but no adapter is found, the device/browser cannot run this build yet. The sandbox browser cannot provide an adapter, so final hardware validation must be performed on the target phone.
 
 ## Memory controls

@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="./icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="stylesheet" href="./styles.css?v=3">
+  <link rel="stylesheet" href="./styles.css?v=4">
   <title>Edge Chat</title>
 </head>
 <body>
@@ -24,6 +24,7 @@
       <div class="model-card-head"><div><p class="eyebrow">On-device AI</p><h1 id="modelTitle">Private chat</h1><p class="muted">Runs locally in this browser with WebGPU. Your messages stay on this device.</p></div><span id="statusDot" class="status-dot" data-state="idle" aria-label="Starting"></span></div>
       <div class="model-meta"><span id="statusText">Starting</span><span id="memoryStatus">No remembered facts</span></div>
       <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
+      <p id="downloadStats" class="download-stats" role="status">Preparing model download…</p>
       <button id="retryButton" class="primary-button hidden" type="button">Retry</button>
       <p id="loadMessage" class="helper" role="status">The 1-bit model loads in the background. The first run downloads it once (~0.3 GB), then it lives on this device.</p>
     </section>
@@ -39,7 +40,7 @@
     </form>
     <p class="footer-note">Local inference · No account · No cloud API key</p>
   </main>
-  <script type="module" src="./app.js?v=4"></script>
+  <script type="module" src="./app.js?v=5"></script>
   <script>if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));</script>
 </body>
 </html>

@@ -27,6 +27,7 @@ const statusDot = $("statusDot");
 const progressBar = $("progressBar");
 const loadMessage = $("loadMessage");
 const memoryStatus = $("memoryStatus");
+const downloadStats = $("downloadStats");
 
 let worker = null;
 let ready = false;
@@ -48,6 +49,29 @@ function setStatus(state, text, detail = "") {
 }
 function setProgress(value) {
   progressBar.style.width = `${Math.max(0, Math.min(100, value))}%`;
+}
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
+}
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "calculating time left";
+  const rounded = Math.ceil(seconds);
+  if (rounded < 60) return `about ${rounded}s left`;
+  const minutes = Math.floor(rounded / 60);
+  const secs = rounded % 60;
+  return `about ${minutes}m${secs ? ` ${secs}s` : ""} left`;
+}
+function updateDownloadStats(m) {
+  if (!m || !m.total) {
+    downloadStats.textContent = "Preparing model download…";
+    return;
+  }
+  const speed = m.bytesPerSecond > 0 ? `${formatBytes(m.bytesPerSecond)}/s` : "download complete";
+  const eta = m.bytesPerSecond > 0 ? formatDuration(m.remaining) : "preparing GPU";
+  downloadStats.textContent = `${formatBytes(m.loaded)} / ${formatBytes(m.total)} · ${speed} · ${eta}`;
 }
 function showRetry(show) {
   retryButton.classList.toggle("hidden", !show);
@@ -198,9 +222,12 @@ function onWorkerMessage(e) {
       break;
     case "progress":
       setProgress(m.progress);
+      updateDownloadStats(m);
       break;
     case "loading":
       setStatus("loading", "Loading model", m.data || "");
+      if ((m.data || "").toLowerCase().includes("download complete")) downloadStats.textContent = "Download complete · preparing GPU…";
+      else if ((m.data || "").toLowerCase().includes("gpu warm-up")) downloadStats.textContent = "GPU warm-up complete · starting chat…";
       break;
     case "ready":
       ready = true;
@@ -238,6 +265,7 @@ function onWorkerMessage(e) {
     case "fatal":
       ready = false;
       setProgress(0);
+      downloadStats.textContent = "Model did not finish loading. Tap Retry to try again.";
       setStatus("error", "Couldn't start", m.data || "Unknown error.");
       showRetry(true);
       break;
