@@ -18,7 +18,7 @@ Private, on-device chat running the **Bonsai 1.7B ONNX model** with **1-bit `q1`
 
 During first load, the app shows downloaded bytes, total bytes, transfer speed, and an estimated time remaining. After the download finishes, it switches to separate **Preparing the GPU** and **GPU warm-up** stages. The progress bar may remain at 99% during this final preparation; that means the file is downloaded and the runtime is initializing it.
 
-The app now displays a clearer adapter failure message. If WebGPU exists but no adapter is found, the device/browser cannot run this build yet. The sandbox browser cannot provide an adapter, so final hardware validation must be performed on the target phone.
+The app reports when WebGPU is unavailable or no compatible adapter is found. The hosted audit browser had no usable adapter, so successful model initialization could not be verified there. Test on the intended computer or phone using a current browser and WebGPU-enabled graphics hardware/drivers.
 
 ## Memory controls
 
