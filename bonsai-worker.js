@@ -6,9 +6,16 @@ import {
   InterruptableStoppingCriteria,
 } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.1.0/+esm";
 
-const MODEL_ID = "onnx-community/Bonsai-1.7B-ONNX";
+const MODEL_PROFILES = {
+  light: { id: "HuggingFaceTB/SmolLM2-135M-Instruct", dtype: "q4f16" },
+  fast: { id: "HuggingFaceTB/SmolLM2-360M-Instruct", dtype: "q4f16" },
+  quality: { id: "onnx-community/Bonsai-1.7B-ONNX", dtype: "q1" },
+};
+let modelKey = "fast";
 let generator = null;
 const stoppingCriteria = new InterruptableStoppingCriteria();
+const generationQueue = [];
+let generationQueueRunning = false;
 const fileProgress = new Map();
 let downloadStartedAt = 0;
 let lastReportedAt = 0;
@@ -44,10 +51,11 @@ async function load() {
     fileProgress.clear();
     downloadStartedAt = performance.now();
     lastReportedAt = 0;
-    self.postMessage({ status: "loading", data: "Downloading 1-bit model…" });
-    generator = await pipeline("text-generation", MODEL_ID, {
+    const profile = MODEL_PROFILES[modelKey] || MODEL_PROFILES.fast;
+    self.postMessage({ status: "loading", data: `Downloading ${profile.id} (${profile.dtype})…` });
+    generator = await pipeline("text-generation", profile.id, {
       device: "webgpu",
-      dtype: "q1",
+      dtype: profile.dtype,
       progress_callback: (info) => {
         if (!info.file) return;
         fileProgress.set(info.file, { l: Number(info.loaded ?? 0), t: Number(info.total ?? 0) });
@@ -75,7 +83,7 @@ async function load() {
   }
 }
 
-async function generate(messages, { maxTokens = 1024, tag = "" } = {}) {
+async function generate(messages, { maxTokens = 256, tag = "" } = {}) {
   stoppingCriteria.reset();
   let startTime = 0;
   let numTokens = 0;
@@ -100,13 +108,38 @@ async function generate(messages, { maxTokens = 1024, tag = "" } = {}) {
   }
 }
 
+async function drainGenerationQueue() {
+  if (generationQueueRunning) return;
+  generationQueueRunning = true;
+  try {
+    while (generationQueue.length) {
+      const next = generationQueue.shift();
+      try {
+        await generate(next.messages, next);
+      } catch (e) {
+        self.postMessage({ status: "error", tag: next.tag, data: `Generation queue error: ${e?.message || "unknown error"}` });
+      }
+    }
+  } finally {
+    generationQueueRunning = false;
+  }
+}
+function enqueueGeneration(job) {
+  generationQueue.push(job);
+  void drainGenerationQueue();
+}
+
 self.addEventListener("message", (e) => {
-  const { type, messages, maxTokens, tag } = e.data ?? {};
-  if (type === "check") check();
+  const { type, messages, maxTokens, tag, modelKey: requestedModelKey } = e.data ?? {};
+  if (type === "check") {
+    if (MODEL_PROFILES[requestedModelKey]) modelKey = requestedModelKey;
+    check();
+  }
   else if (type === "load") {
+    if (MODEL_PROFILES[requestedModelKey]) modelKey = requestedModelKey;
     if (!generator) load();
     else self.postMessage({ status: "ready" });
-  } else if (type === "generate") generate(messages, { maxTokens, tag });
+  } else if (type === "generate") enqueueGeneration({ messages, maxTokens, tag });
   else if (type === "interrupt") stoppingCriteria.interrupt();
   else if (type === "reset") stoppingCriteria.reset();
 });

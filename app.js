@@ -10,6 +10,27 @@
 
 const STM_MAX_MESSAGES = 16; // short-term window: last 8 exchanges, FIFO
 const EXTRACT_EVERY = 4; // run fact extraction every N exchanges
+const MODEL_PREF_KEY = "edgechat.model.v1";
+const MODEL_PROFILES = {
+  light: {
+    label: "SmolLM2 Instruct 135M · q4f16",
+    id: "HuggingFaceTB/SmolLM2-135M-Instruct",
+    dtype: "q4f16",
+    maxTokens: 144,
+  },
+  fast: {
+    label: "SmolLM2 Instruct 360M · q4f16",
+    id: "HuggingFaceTB/SmolLM2-360M-Instruct",
+    dtype: "q4f16",
+    maxTokens: 192,
+  },
+  quality: {
+    label: "Bonsai 1.7B · q1",
+    id: "onnx-community/Bonsai-1.7B-ONNX",
+    dtype: "q1",
+    maxTokens: 256,
+  },
+};
 const LTM_KEY = "edgechat.ltm.v1";
 const LTM_MAX_FACTS = 200;
 const LTM_TOP_K = 5; // facts injected per prompt
@@ -18,6 +39,9 @@ const $ = (id) => document.getElementById(id);
 const clearButton = $("clearButton");
 const memoryButton = $("memoryButton");
 const retryButton = $("retryButton");
+const modelChoice = $("modelChoice");
+const modelGuidance = $("modelGuidance");
+const loadModelButton = $("loadModelButton");
 const promptInput = $("promptInput");
 const sendButton = $("sendButton");
 const composer = $("composer");
@@ -34,6 +58,8 @@ let ready = false;
 let generating = false;
 let extracting = false;
 let booted = false;
+let activeModelKey = null;
+let selectedModelKey = getPreferredModel();
 let stm = []; // [{role, content}] — short-term, memory only
 let exchanges = 0;
 let tagSeq = 0;
@@ -41,6 +67,38 @@ const pending = new Map(); // tag -> { resolve, onChunk, acc }
 let factCache = loadLtm();
 
 // ---- UI helpers -------------------------------------------------------------
+function getPreferredModel() {
+  try {
+    const saved = localStorage.getItem(MODEL_PREF_KEY);
+    if (saved && MODEL_PROFILES[saved]) return saved;
+  } catch {
+    /* use the conservative default if storage is unavailable */
+  }
+  return Number.isFinite(navigator.deviceMemory) && navigator.deviceMemory > 8 ? "quality" : "light";
+}
+function updateModelGuidance() {
+  const key = modelChoice.value;
+  const memoryEstimate = Number.isFinite(navigator.deviceMemory)
+    ? `The browser estimates about ${navigator.deviceMemory} GB total RAM.`
+    : "This browser does not expose a RAM estimate.";
+  const modelNote = key === "light"
+    ? "Lightest uses a 135M instruction model for the lowest compute and a smaller working set; answers are much less capable."
+    : key === "fast"
+      ? "Fast uses a compact 360M instruction model for lower compute, with less capability than Bonsai 1.7B."
+      : "Higher capacity uses Bonsai 1.7B q1. It may be significantly slower and needs more available memory.";
+  modelGuidance.textContent = `${modelNote} ${memoryEstimate} Browsers cannot report current free RAM.`;
+}
+function updateModelControls() {
+  const busy = generating || extracting || (!ready && booted);
+  const needsSwitch = ready && selectedModelKey !== activeModelKey;
+  modelChoice.disabled = busy;
+  loadModelButton.disabled = busy || (ready && !needsSwitch);
+  loadModelButton.textContent = busy
+    ? "Loading model…"
+    : ready
+      ? needsSwitch ? "Switch model" : "Model loaded"
+      : "Load selected model";
+}
 function setStatus(state, text, detail = "") {
   statusDot.dataset.state = state;
   statusDot.setAttribute("aria-label", text);
@@ -202,24 +260,27 @@ async function maybeExtractFacts() {
     /* extraction is best-effort; chat is unaffected */
   } finally {
     extracting = false;
+    updateModelControls();
   }
 }
 
 // ---- Worker plumbing --------------------------------------------------------
-function runGenerate(messages, { maxTokens = 1024, silent = false, onChunk = null } = {}) {
+function runGenerate(messages, { maxTokens = 256, silent = false, onChunk = null } = {}) {
   const tag = `t${++tagSeq}`;
   return new Promise((resolve) => {
     pending.set(tag, { resolve, onChunk, acc: "", silent });
-    worker.postMessage({ type: "generate", messages, maxTokens, tag });
+    worker.postMessage({ type: "generate", messages, maxTokens, tag, silent });
   });
 }
 function onWorkerMessage(e) {
   const m = e.data ?? {};
   switch (m.status) {
-    case "gpu-ok":
-      setStatus("loading", "Downloading model", `${m.data ? `WebGPU adapter: ${m.data}. ` : ""}First run downloads Bonsai once (~0.3 GB), then it lives on this device.`);
-      worker.postMessage({ type: "load" });
+    case "gpu-ok": {
+      const profile = MODEL_PROFILES[activeModelKey] || MODEL_PROFILES.fast;
+      setStatus("loading", "Downloading model", `${profile.label}. ${m.data ? `WebGPU adapter: ${m.data}. ` : ""}First use downloads model files to this device.`);
+      worker.postMessage({ type: "load", modelKey: activeModelKey });
       break;
+    }
     case "progress":
       setProgress(m.progress);
       updateDownloadStats(m);
@@ -234,6 +295,9 @@ function onWorkerMessage(e) {
       setProgress(100);
       setStatus("ready", "Ready", memoryLine());
       setComposerEnabled(true);
+      downloadStats.textContent = "Model ready · weights are cached locally for this browser.";
+      modelChoice.disabled = false;
+      updateModelControls();
       promptInput.focus();
       break;
     case "start":
@@ -264,9 +328,12 @@ function onWorkerMessage(e) {
     }
     case "fatal":
       ready = false;
+      booted = false;
+      activeModelKey = null;
       setProgress(0);
       downloadStats.textContent = "Model did not finish loading. Tap Retry to try again.";
       setStatus("error", "Couldn't start", m.data || "Unknown error.");
+      updateModelControls();
       showRetry(true);
       break;
   }
@@ -283,6 +350,7 @@ async function sendMessage(event) {
   const body = addMessage("assistant", "");
   generating = true;
   setComposerEnabled(false);
+  updateModelControls();
   setStatus("loading", "Thinking", "");
   const messages = [
     { role: "system", content: buildSystemPrompt(text) },
@@ -291,6 +359,7 @@ async function sendMessage(event) {
   ];
   try {
     const full = await runGenerate(messages, {
+      maxTokens: (MODEL_PROFILES[activeModelKey] || MODEL_PROFILES.fast).maxTokens,
       onChunk: (acc) => {
         body.textContent = acc;
         chatLog.scrollTop = chatLog.scrollHeight;
@@ -309,6 +378,7 @@ async function sendMessage(event) {
   } finally {
     generating = false;
     setComposerEnabled(true);
+    updateModelControls();
     promptInput.focus();
   }
 }
@@ -341,8 +411,12 @@ function forgetMemory() {
 function boot() {
   if (booted) return;
   booted = true;
+  activeModelKey = selectedModelKey;
+  modelChoice.disabled = true;
+  loadModelButton.disabled = true;
+  loadModelButton.textContent = "Loading model…";
   showRetry(false);
-  setStatus("loading", "Starting", "Checking WebGPU…");
+  setStatus("loading", "Starting", `Checking WebGPU for ${MODEL_PROFILES[activeModelKey].label}…`);
   setProgress(4);
   try {
     worker?.terminate();
@@ -360,9 +434,28 @@ function boot() {
   worker.onerror = () => {
     setProgress(0);
     setStatus("error", "Couldn't start", "Inference worker failed to load. Check your connection and retry.");
+    booted = false;
+    activeModelKey = null;
+    updateModelControls();
     showRetry(true);
   };
-  worker.postMessage({ type: "check" });
+  worker.postMessage({ type: "check", modelKey: activeModelKey });
+}
+
+function startSelectedModel() {
+  if (generating || extracting) return;
+  if (booted) {
+    if (!ready || selectedModelKey === activeModelKey) return;
+    worker?.terminate();
+    worker = null;
+    ready = false;
+    booted = false;
+    activeModelKey = null;
+    setComposerEnabled(false);
+    setProgress(0);
+    setStatus("loading", "Switching model", "Stopping the current local model…");
+  }
+  boot();
 }
 
 clearButton.addEventListener("click", clearConversation);
@@ -380,7 +473,19 @@ promptInput.addEventListener("keydown", (event) => {
 });
 retryButton.addEventListener("click", () => {
   booted = false;
+  activeModelKey = null;
   boot();
+});
+loadModelButton.addEventListener("click", startSelectedModel);
+modelChoice.addEventListener("change", () => {
+  selectedModelKey = modelChoice.value;
+  try {
+    localStorage.setItem(MODEL_PREF_KEY, selectedModelKey);
+  } catch {
+    /* model selection still works for this page */
+  }
+  updateModelGuidance();
+  updateModelControls();
 });
 window.addEventListener("beforeunload", () => {
   try {
@@ -390,11 +495,11 @@ window.addEventListener("beforeunload", () => {
   }
 });
 window.addEventListener("online", () => {
-  if (!ready && !booted) boot();
+  if (!ready && booted) setStatus("loading", "Waiting for connection", "Reconnect, then tap Retry to continue model loading.");
 });
 
-// Start in the background after first paint; the UI never blocks on the model.
 updateMemoryStatus();
-if ("requestIdleCallback" in window) requestIdleCallback(() => boot(), { timeout: 1500 });
-else setTimeout(boot, 300);
-setStatus("loading", "Starting", "Checking WebGPU and device compatibility…");
+modelChoice.value = selectedModelKey;
+updateModelGuidance();
+updateModelControls();
+setStatus("idle", "Not loaded", "The local model will only use memory after you press Load.");
