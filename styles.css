@@ -8,5 +8,10 @@ body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font
 input,textarea { border:1px solid var(--line); background:#0f1218; color:var(--text); border-radius:9px; padding:10px 12px; font:inherit; outline:none; }input:focus,textarea:focus { border-color:var(--accent); }.status { margin:10px 0 0; color:var(--muted); font-size:12px; }.status[data-state=ready] { color:var(--accent); }.status[data-state=error] { color:var(--error); }
 .chat-log { flex:1; min-height:260px; display:flex; flex-direction:column; gap:10px; }.empty-state { margin:auto; text-align:center; color:var(--muted); }.empty-state span { font-size:32px; color:var(--accent); }.empty-state h2 { color:var(--text); font-size:18px; margin:4px 0; }.empty-state p { margin:0; }
 .message { max-width:88%; padding:11px 13px; border-radius:13px; white-space:pre-wrap; overflow-wrap:anywhere; }.message.user { align-self:flex-end; background:#234936; }.message.assistant { align-self:flex-start; background:var(--card); border:1px solid var(--line); }.message img { display:block; max-width:min(300px,100%); max-height:260px; border-radius:9px; margin-bottom:8px; }.message-body { display:block; }
+.feedback { display:flex; gap:6px; margin-top:8px; }
+.feedback button { background:transparent; border:1px solid var(--line); border-radius:8px; padding:2px 9px; font-size:13px; line-height:1.6; cursor:pointer; opacity:.5; color:var(--text); }
+.feedback button:hover:not(:disabled) { opacity:1; }
+.feedback button.active { opacity:1; border-color:var(--accent); }
+.feedback button:disabled { cursor:default; }
 .composer { display:grid; grid-template-columns:1fr auto; gap:8px; }.composer input[type=file] { grid-column:1 / -1; width:100%; padding:8px; font-size:12px; }.composer textarea { resize:none; min-height:44px; }.send-button { width:46px; font-size:22px; background:var(--accent); color:#0c1711; font-weight:800; }.footer-note { color:var(--muted); font-size:11px; text-align:center; margin:0; }
 @media (max-width:520px) { .app-shell { padding:12px 10px 18px; }.message { max-width:94%; } }

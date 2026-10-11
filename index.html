@@ -7,7 +7,7 @@
   <meta name="description" content="Minimal private image chat powered by a local LiteRT-LM model.">
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=6">
+  <link rel="stylesheet" href="./styles.css?v=7">
   <title>Edge Chat</title>
 </head>
 <body>
@@ -35,8 +35,8 @@
       <textarea id="promptInput" rows="1" maxlength="4000" placeholder="Ask about an image…"></textarea>
       <button id="sendButton" class="send-button" type="submit" aria-label="Send">↑</button>
     </form>
-    <p class="footer-note">Model: smolvlm2-500m · LiteRT-LM · 4-bit · 344 MiB</p>
+    <p class="footer-note" id="footerNote">Model: smolvlm2-500m · LiteRT-LM · 4-bit · 344 MiB</p>
   </main>
-  <script type="module" src="./app.js?v=6"></script>
+  <script type="module" src="./app.js?v=7"></script>
 </body>
 </html>
