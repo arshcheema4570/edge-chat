@@ -1,7 +1,7 @@
 {
-  "name": "Edge Chat — Bonsai 1.7B",
+  "name": "Edge Chat — Private Local AI",
   "short_name": "Edge Chat",
-  "description": "Private, on-device chat powered by the Bonsai 1.7B 1-bit model.",
+  "description": "Private, on-device chat with selectable local models for speed or capability.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

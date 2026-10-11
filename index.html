@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b0c0f">
-  <meta name="description" content="Private, on-device chat in the browser. 1-bit local model on WebGPU.">
+  <meta name="description" content="Private, on-device chat with selectable local models for speed or capability.">
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="stylesheet" href="./styles.css?v=4">
+  <link rel="stylesheet" href="./styles.css?v=6">
   <title>Edge Chat</title>
 </head>
 <body>
@@ -21,26 +21,36 @@
     </header>
 
     <section class="model-card" aria-labelledby="modelTitle">
-      <div class="model-card-head"><div><p class="eyebrow">On-device AI</p><h1 id="modelTitle">Private chat</h1><p class="muted">Runs locally in this browser with WebGPU. Your messages stay on this device.</p></div><span id="statusDot" class="status-dot" data-state="idle" role="img" aria-label="Starting"></span></div>
-      <div class="model-meta"><span id="statusText">Starting</span><span id="memoryStatus">No remembered facts</span></div>
+      <div class="model-card-head"><div><p class="eyebrow">On-device AI</p><h1 id="modelTitle">Private chat</h1><p class="muted">Your messages stay on this device. Choose a model before loading so Edge Chat uses memory only when you ask it to.</p></div><span id="statusDot" class="status-dot" data-state="idle" role="img" aria-label="Not loaded"></span></div>
+      <div class="model-picker">
+        <label for="modelChoice">Local model</label>
+        <select id="modelChoice">
+          <option value="light">Lightest · SmolLM2 Instruct 135M · lowest compute</option>
+          <option value="fast">Fast · SmolLM2 Instruct 360M · lower compute</option>
+          <option value="quality">Higher capacity · Bonsai 1.7B · q1</option>
+        </select>
+        <p id="modelGuidance" class="model-guidance">The fast model is smaller and usually responds sooner, but is less capable. The higher-capacity model may need more free RAM and can be slower.</p>
+        <button id="loadModelButton" class="primary-button" type="button">Load selected model</button>
+      </div>
+      <div class="model-meta"><span id="statusText">Not loaded</span><span id="memoryStatus">No remembered facts</span></div>
       <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
-      <p id="downloadStats" class="download-stats" role="status">Preparing model download…</p>
+      <p id="downloadStats" class="download-stats" role="status">Choose a model and load it to begin.</p>
       <button id="retryButton" class="primary-button hidden" type="button">Retry</button>
-      <p id="loadMessage" class="helper" role="status">The 1-bit model loads in the background. The first run downloads it once (~0.3 GB), then it lives on this device.</p>
+      <p id="loadMessage" class="helper" role="status">Lightest is selected by default on devices reporting 8 GB RAM or less. Choose a larger model only if it responds acceptably on your hardware.</p>
     </section>
 
     <section id="chatLog" class="chat-log" aria-live="polite" aria-label="Conversation">
-      <div class="empty-state" id="emptyState"><span class="empty-icon" aria-hidden="true">◌</span><h2>Private chat, local model</h2><p>The model is loading in the background — chat unlocks when it's ready.</p></div>
+      <div class="empty-state" id="emptyState"><span class="empty-icon" aria-hidden="true">◌</span><h2>Private chat, local model</h2><p>Load a model to start chatting. No message is sent to a cloud AI service.</p></div>
     </section>
 
     <form id="composer" class="composer">
       <label class="sr-only" for="promptInput">Message Edge</label>
-      <textarea id="promptInput" rows="1" maxlength="12000" placeholder="Loading model…" disabled></textarea>
+      <textarea id="promptInput" rows="1" maxlength="12000" placeholder="Load a model to start chatting…" disabled></textarea>
       <button id="sendButton" class="send-button" type="submit" disabled aria-label="Send message">↑</button>
     </form>
     <p class="footer-note">Local inference · No account · No cloud API key</p>
   </main>
-  <script type="module" src="./app.js?v=5"></script>
+  <script type="module" src="./app.js?v=6"></script>
   <script>if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));</script>
 </body>
 </html>
