@@ -2,45 +2,41 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b0c0f">
-  <meta name="description" content="Private, on-device chat in the browser. 1-bit local model on WebGPU.">
+  <meta name="description" content="Minimal private image chat powered by a local LiteRT-LM model.">
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="stylesheet" href="./styles.css?v=4">
+  <link rel="stylesheet" href="./styles.css?v=6">
   <title>Edge Chat</title>
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark" aria-hidden="true">✦</span><div><strong>Edge Chat</strong><span>On-device AI · WebGPU</span></div></div>
-      <div class="topbar-actions"><button id="clearButton" class="icon-button" type="button" title="Clear current chat" aria-label="Clear current chat">⌫</button><button id="memoryButton" class="icon-button" type="button" title="Manage remembered facts" aria-label="Manage remembered facts">♧</button></div>
+      <div class="brand"><span class="brand-mark">✦</span><div><strong>Edge Chat</strong><span>SmolVLM2 · LiteRT-LM</span></div></div>
+      <button id="clearButton" class="icon-button" type="button" title="Clear chat" aria-label="Clear chat">⌫</button>
     </header>
 
-    <section class="model-card" aria-labelledby="modelTitle">
-      <div class="model-card-head"><div><p class="eyebrow">On-device AI</p><h1 id="modelTitle">Private chat</h1><p class="muted">Runs locally in this browser with WebGPU. Your messages stay on this device.</p></div><span id="statusDot" class="status-dot" data-state="idle" role="img" aria-label="Starting"></span></div>
-      <div class="model-meta"><span id="statusText">Starting</span><span id="memoryStatus">No remembered facts</span></div>
-      <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
-      <p id="downloadStats" class="download-stats" role="status">Preparing model download…</p>
-      <button id="retryButton" class="primary-button hidden" type="button">Retry</button>
-      <p id="loadMessage" class="helper" role="status">The 1-bit model loads in the background. The first run downloads it once (~0.3 GB), then it lives on this device.</p>
+    <section class="model-card">
+      <div class="eyebrow">LOCAL MODEL</div>
+      <h1>Private image chat</h1>
+      <p class="muted">SmolVLM2-500M runs through your LiteRT-LM server. Images and messages stay local to that server.</p>
+      <label class="endpoint-label" for="endpointInput">LiteRT-LM endpoint</label>
+      <div class="endpoint-row"><input id="endpointInput" type="url" spellcheck="false"><button id="connectButton" class="primary-button" type="button">Connect</button></div>
+      <p id="statusText" class="status" role="status">Not connected</p>
     </section>
 
-    <section id="chatLog" class="chat-log" aria-live="polite" aria-label="Conversation">
-      <div class="empty-state" id="emptyState"><span class="empty-icon" aria-hidden="true">◌</span><h2>Private chat, local model</h2><p>The model is loading in the background — chat unlocks when it's ready.</p></div>
+    <section id="chatLog" class="chat-log" aria-live="polite">
+      <div id="emptyState" class="empty-state"><span>◌</span><h2>Ready for a photo</h2><p>Attach an image, ask a question, and send.</p></div>
     </section>
 
     <form id="composer" class="composer">
-      <label class="sr-only" for="promptInput">Message Edge</label>
-      <textarea id="promptInput" rows="1" maxlength="12000" placeholder="Loading model…" disabled></textarea>
-      <button id="sendButton" class="send-button" type="submit" disabled aria-label="Send message">↑</button>
+      <input id="imageInput" type="file" accept="image/png,image/jpeg,image/webp">
+      <textarea id="promptInput" rows="1" maxlength="4000" placeholder="Ask about an image…"></textarea>
+      <button id="sendButton" class="send-button" type="submit" aria-label="Send">↑</button>
     </form>
-    <p class="footer-note">Local inference · No account · No cloud API key</p>
+    <p class="footer-note">Model: smolvlm2-500m · LiteRT-LM · 4-bit · 344 MiB</p>
   </main>
-  <script type="module" src="./app.js?v=5"></script>
-  <script>if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));</script>
+  <script type="module" src="./app.js?v=6"></script>
 </body>
 </html>
