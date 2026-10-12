@@ -1,0 +1,33 @@
+name: Package unsigned IWA bundle
+
+on:
+  pull_request:
+    paths:
+      - "**"
+      - ".github/workflows/package-unsigned-iwa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build unsigned Web Bundle
+        env:
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+        run: node scripts/package-iwa.mjs --output "$RUNNER_TEMP/$REPOSITORY_NAME-unsigned.wbn"
+      - name: Upload unsigned bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.repository.name }}-unsigned-iwa
+          path: ${{ runner.temp }}/${{ github.event.repository.name }}-unsigned.wbn
+          if-no-files-found: error
+          retention-days: 7
