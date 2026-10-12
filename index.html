@@ -10,7 +10,7 @@
   <link rel="apple-touch-icon" href="./icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="stylesheet" href="./styles.css?v=6">
+  <link rel="stylesheet" href="./styles.css?v=7">
   <title>Edge Chat</title>
 </head>
 <body>
@@ -33,6 +33,10 @@
         <button id="loadModelButton" class="primary-button" type="button">Load selected model</button>
       </div>
       <div class="model-meta"><span id="statusText">Not loaded</span><span id="memoryStatus">No remembered facts</span></div>
+      <div class="semantic-controls">
+        <button id="semanticToggleButton" class="secondary-button" type="button" aria-pressed="false">Enable semantic memory · 165 MB</button>
+        <p id="semanticStatus" class="semantic-status" role="status">Optional. EmbeddingGemma Text 270M finds remembered facts by meaning using WebGPU. It downloads about 165 MB and uses additional RAM and GPU memory; a compatible adapter is required.</p>
+      </div>
       <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
       <p id="downloadStats" class="download-stats" role="status">Choose a model and load it to begin.</p>
       <button id="retryButton" class="primary-button hidden" type="button">Retry</button>
@@ -50,7 +54,7 @@
     </form>
     <p class="footer-note">Local inference · No account · No cloud API key</p>
   </main>
-  <script type="module" src="./app.js?v=6"></script>
+  <script type="module" src="./app.js?v=8"></script>
   <script>if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));</script>
 </body>
 </html>
